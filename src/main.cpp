@@ -29,13 +29,11 @@ static int buttonAState;
 static uint64_t check_interval_ms;
 
 const char togglBaseURI[] = "https://www.toggl.com/api/v8/time_entries/";
-//String togglCurrentURI = togglBaseURI + "current";
 const char togglCurrentURI[] = "https://www.toggl.com/api/v8/time_entries/current";
 const char togglStartURI[] = "https://www.toggl.com/api/v8/time_entries/start";
 const char togglSummURI[] = "https://toggl.com/reports/api/v2/summary";
-//String togglStartURI = togglBaseURI + "start";
 
-String auth;
+char auth[150];
 char togglId[10];
 
 // SSL Cert for Comodo CA
@@ -129,7 +127,7 @@ void start_entry()
 {
   state = 2;
   HTTPClient client(SSL_CA_PEM, HTTP_POST, togglStartURI);
-  client.set_header("Authorization", auth.c_str());
+  client.set_header("Authorization", auth);
   client.set_header("Content-Type", "application/json");
 
   Screen.clean();
@@ -151,7 +149,7 @@ void start_entry()
   time_entry["start"] = buf;
 
   root.printTo(Serial);
-
+  
   String body;
   root.printTo(body);
 
@@ -173,10 +171,10 @@ void start_entry()
 void stop_entry()
 {
   state = 2;
-  char requestURI[sizeof(togglBaseURI) + sizeof(togglId) + sizeof("/stop") + 1];
+  char requestURI[70];
   sprintf(requestURI, "%s%s/stop", togglBaseURI, togglId);
   HTTPClient client(SSL_CA_PEM, HTTP_PUT, requestURI);
-  client.set_header("Authorization", auth.c_str());
+  client.set_header("Authorization", auth);
   client.set_header("Content-Type", "application/json");
   Screen.clean();
   Screen.print(0, "Stopping");
@@ -215,11 +213,12 @@ void get_day_total(long current_duration)
 
   strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d", &tm);
 
-
-  char requestURI[sizeof(togglSummURI) + sizeof("?user_agent=toggltoggle&workspace_id=") + sizeof(TOGGLWID) + sizeof("&since=") + sizeof(time_buffer)];
+  Serial.println("Current duration");
+  delay(100);
+  char requestURI[120];
   sprintf(requestURI, "%s?user_agent=toggltoggle&workspace_id=%s&since=%s", togglSummURI, TOGGLWID, time_buffer);
   HTTPClient client(SSL_CA_PEM, HTTP_GET, requestURI);
-  client.set_header("Authorization", auth.c_str());
+  client.set_header("Authorization", auth);
   client.set_header("Content-Type", "application/json");
   Serial.println(requestURI);
 
@@ -241,13 +240,6 @@ void get_day_total(long current_duration)
 
     struct tm tm = convert_seconds_to_tm(daily_total);
 
-    Serial.printf("Total_grand: %u\n", total_grand);
-    delay(100);
-    Serial.printf("current_duration: %u\n", current_duration);
-    delay(100);
-    Serial.printf("daily_total: %u\n", daily_total);
-    delay(100);
-
     char time_buffer[10];
     strftime(time_buffer, sizeof(time_buffer), "%T", &tm);
     Serial.println(time_buffer);
@@ -260,7 +252,7 @@ void get_current_duration()
 {
   rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
   HTTPClient client(SSL_CA_PEM, HTTP_GET, togglCurrentURI);
-  client.set_header("Authorization", auth.c_str());
+  client.set_header("Authorization", auth);
   client.set_header("Content-Type", "application/json");
   Serial.print("Requesting ");
   Serial.println(togglCurrentURI);
@@ -330,8 +322,8 @@ void setup()
 
   // Create basic auth header
   rbase64.encode(TOGGLAUTHSTRING);
-  String b64enc = rbase64.result();
-  auth = "Basic " + b64enc;
+  char *b64enc = rbase64.result();
+  sprintf(auth, "Basic %s", b64enc);
 
   // Button setup
   pinMode(USER_BUTTON_A, INPUT);

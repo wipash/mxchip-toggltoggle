@@ -11,10 +11,10 @@
 #define TOGGLAUTHSTRING TOGGLUSERNAME ":" TOGGLPASSWORD
 
 // Toggl Project ID
-#define TOGGLPID 000000000
+#define TOGGLPID "000000000"
 
 // Toggl Workspace ID
-#define TOGGLWID 0000000
+#define TOGGLWID "0000000"
 
 // Toggl description for entry
 #define TOGGLDESCRIPTION "Working"
