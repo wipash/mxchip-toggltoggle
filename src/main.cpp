@@ -14,27 +14,27 @@ static RGB_LED rgbLed;
 
 static bool hasWiFi;
 
-static int status = WL_IDLE_STATUS;
+static uint32_t status = WL_IDLE_STATUS;
 
-static int duration;
+static uint32_t duration;
 
-static int state = 2;
+static uint32_t state = 2;
 // 0 = stopped
 // 1 = running
 // 2 = updating
 
-static int lastButtonAState;
-static int buttonAState;
+static uint32_t lastButtonAState;
+static uint32_t buttonAState;
 
-static uint64_t check_interval_ms;
+static uint32_t checkIntervalMs;
 
-const char togglBaseURI[] = "https://www.toggl.com/api/v8/time_entries/";
-const char togglCurrentURI[] = "https://www.toggl.com/api/v8/time_entries/current";
-const char togglStartURI[] = "https://www.toggl.com/api/v8/time_entries/start";
-const char togglSummURI[] = "https://toggl.com/reports/api/v2/summary";
+const char TOGGL_BASE_URI[] = "https://www.toggl.com/api/v8/time_entries/";
+const char TOGGL_CURRENT_URI[] = "https://www.toggl.com/api/v8/time_entries/current";
+const char TOGGL_START_URI[] = "https://www.toggl.com/api/v8/time_entries/start";
+const char TOGGL_SUMM_URI[] = "https://toggl.com/reports/api/v2/summary";
 
-char auth[150];
-char togglId[10];
+char authHeaderString[150];
+char currentEntryID[10];
 
 // SSL Cert for Comodo CA
 const char SSL_CA_PEM[] = "-----BEGIN CERTIFICATE-----\n"
@@ -89,26 +89,22 @@ void InitWifi()
   }
 }
 
-void update_state(int newstate)
+void update_state(uint32_t newState)
 {
-  if (state != newstate)
+  if (state != newState)
   {
-    state = newstate;
+    state = newState;
     Screen.clean();
   }
 }
 
-struct tm convert_seconds_to_tm(long seconds)
+struct tm convert_seconds_to_tm(uint32_t seconds)
 {
-  int hh, mm, ss;
+  uint32_t hh, mm, ss;
   hh = seconds / 3600;
-
   seconds %= 3600;
-
   mm = seconds / 60;
-
   seconds %= 60;
-
   ss = seconds;
 
   struct tm tm;
@@ -123,11 +119,18 @@ struct tm convert_seconds_to_tm(long seconds)
   return tm;
 }
 
+void date_plus_hours(struct tm* date, uint32_t hours)
+{
+  const time_t ONE_HOUR = 60*60;
+  time_t dateSeconds = mktime(date) + (hours * ONE_HOUR);
+  *date = *localtime( &dateSeconds);
+}
+
 void start_entry()
 {
   state = 2;
-  HTTPClient client(SSL_CA_PEM, HTTP_POST, togglStartURI);
-  client.set_header("Authorization", auth);
+  HTTPClient client(SSL_CA_PEM, HTTP_POST, TOGGL_START_URI);
+  client.set_header("Authorization", authHeaderString);
   client.set_header("Content-Type", "application/json");
 
   Screen.clean();
@@ -136,8 +139,8 @@ void start_entry()
 
   time_t now;
   time(&now);
-  char buf[sizeof "2011-10-08T07:07:09Z"];
-  strftime(buf, sizeof buf, "%FT%TZ", gmtime(&now));
+  char timeBuffer[21];
+  strftime(timeBuffer, sizeof timeBuffer, "%FT%TZ", gmtime(&now));
 
   const size_t capacity = JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(4);
   DynamicJsonBuffer jsonBuffer(capacity);
@@ -146,10 +149,10 @@ void start_entry()
   time_entry["description"] = TOGGLDESCRIPTION;
   time_entry["pid"] = TOGGLPID;
   time_entry["created_with"] = "toggltoggle";
-  time_entry["start"] = buf;
+  time_entry["start"] = timeBuffer;
 
   root.printTo(Serial);
-  
+
   String body;
   root.printTo(body);
 
@@ -172,9 +175,9 @@ void stop_entry()
 {
   state = 2;
   char requestURI[70];
-  sprintf(requestURI, "%s%s/stop", togglBaseURI, togglId);
+  sprintf(requestURI, "%s%s/stop", TOGGL_BASE_URI, currentEntryID);
   HTTPClient client(SSL_CA_PEM, HTTP_PUT, requestURI);
-  client.set_header("Authorization", auth);
+  client.set_header("Authorization", authHeaderString);
   client.set_header("Content-Type", "application/json");
   Screen.clean();
   Screen.print(0, "Stopping");
@@ -194,31 +197,24 @@ void stop_entry()
   }
 }
 
-void DatePlusHours(struct tm* date, int hours)
+void get_day_total(uint32_t current_duration)
 {
-  const time_t ONE_HOUR = 60*60;
-  time_t date_seconds = mktime(date) + (hours * ONE_HOUR);
-  *date = *localtime( &date_seconds);
-}
-
-void get_day_total(long current_duration)
-{
-  char time_buffer[11];
+  char sinceTimeBuffer[11];
   time_t now = time(NULL);
   struct tm tm;
   tm = *gmtime(&now);
 
   // Add the UTC offset
-  DatePlusHours( &tm, UTCOFFSET);
+  date_plus_hours( &tm, UTCOFFSET);
 
-  strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d", &tm);
+  strftime(sinceTimeBuffer, sizeof(sinceTimeBuffer), "%Y-%m-%d", &tm);
 
   Serial.println("Current duration");
   delay(100);
   char requestURI[120];
-  sprintf(requestURI, "%s?user_agent=toggltoggle&workspace_id=%s&since=%s", togglSummURI, TOGGLWID, time_buffer);
+  sprintf(requestURI, "%s?user_agent=toggltoggle&workspace_id=%s&since=%s", TOGGL_SUMM_URI, TOGGLWID, sinceTimeBuffer);
   HTTPClient client(SSL_CA_PEM, HTTP_GET, requestURI);
-  client.set_header("Authorization", auth);
+  client.set_header("Authorization", authHeaderString);
   client.set_header("Content-Type", "application/json");
   Serial.println(requestURI);
 
@@ -235,27 +231,27 @@ void get_day_total(long current_duration)
     DynamicJsonBuffer jsonBuffer(capacity);
     const char *json = result->body;
     JsonObject &root = jsonBuffer.parseObject(json);
-    long total_grand = root["total_grand"];
-    long daily_total = (total_grand / 1000) + current_duration;
+    uint32_t totalGrand = root["total_grand"];
+    uint32_t dailyTotal = (totalGrand / 1000) + current_duration;
 
-    struct tm tm = convert_seconds_to_tm(daily_total);
+    struct tm tm = convert_seconds_to_tm(dailyTotal);
 
-    char time_buffer[10];
-    strftime(time_buffer, sizeof(time_buffer), "%T", &tm);
-    Serial.println(time_buffer);
+    char totalTimeBuffer[10];
+    strftime(totalTimeBuffer, sizeof(totalTimeBuffer), "%T", &tm);
+    Serial.println(totalTimeBuffer);
     Screen.print(2, "Today's Total");
-    Screen.print(3, time_buffer);
+    Screen.print(3, totalTimeBuffer);
   }
 }
 
 void get_current_duration()
 {
   rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
-  HTTPClient client(SSL_CA_PEM, HTTP_GET, togglCurrentURI);
-  client.set_header("Authorization", auth);
+  HTTPClient client(SSL_CA_PEM, HTTP_GET, TOGGL_CURRENT_URI);
+  client.set_header("Authorization", authHeaderString);
   client.set_header("Content-Type", "application/json");
   Serial.print("Requesting ");
-  Serial.println(togglCurrentURI);
+  Serial.println(TOGGL_CURRENT_URI);
   rgbLed.setColor(RGB_LED_BRIGHTNESS, RGB_LED_BRIGHTNESS, 0);
   const Http_Response *result = client.send(NULL, 0);
   rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
@@ -279,28 +275,28 @@ void get_current_duration()
     {
       Serial.println("parseObject() failed");
     }
-    long data_duration = root["data"]["duration"];
-    long data_id = root["data"]["id"];
-    sprintf(togglId, "%lu", data_id);
+    int32_t data_duration = root["data"]["duration"];
+    uint32_t data_id = root["data"]["id"];
+    sprintf(currentEntryID, "%lu", data_id);
 
-    Serial.println(data_duration);
+    Serial.printf("%d", data_duration);
     if (data_duration < 0)
     {
       update_state(1);
 
-      time_t currentseconds;
-      currentseconds = time(NULL);
-      long duration = currentseconds + data_duration;
+      time_t currentSeconds;
+      currentSeconds = time(NULL);
+      uint32_t duration = currentSeconds + data_duration;
 
       get_day_total(duration);
       struct tm tm = convert_seconds_to_tm(duration);
 
-      char time_buffer[10];
-      strftime(time_buffer, sizeof(time_buffer), "%T", &tm);
-      Serial.println(time_buffer);
+      char runningTimeBuffer[10];
+      strftime(runningTimeBuffer, sizeof(runningTimeBuffer), "%T", &tm);
+      Serial.println(runningTimeBuffer);
 
       Screen.print(0, "Running");
-      Screen.print(1, time_buffer);
+      Screen.print(1, runningTimeBuffer);
       rgbLed.turnOff();
     }
     else
@@ -323,7 +319,7 @@ void setup()
   // Create basic auth header
   rbase64.encode(TOGGLAUTHSTRING);
   char *b64enc = rbase64.result();
-  sprintf(auth, "Basic %s", b64enc);
+  sprintf(authHeaderString, "Basic %s", b64enc);
 
   // Button setup
   pinMode(USER_BUTTON_A, INPUT);
@@ -362,9 +358,9 @@ void loop()
     delay(2000);
   }
 
-  if ((int)SystemTickCounterRead() - check_interval_ms >= getInterval())
+  if ((uint32_t)SystemTickCounterRead() - checkIntervalMs >= getInterval())
   {
     get_current_duration();
-    check_interval_ms = SystemTickCounterRead();
+    checkIntervalMs = SystemTickCounterRead();
   }
 }
