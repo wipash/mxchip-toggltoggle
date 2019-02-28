@@ -1,0 +1,26 @@
+// WiFi details
+#define WIFISSID ""
+#define WIFIPWD  ""
+
+// UTC OFFSET
+#define UTCOFFSET -5
+
+// Toggl login details
+#define TOGGLUSERNAME ""
+#define TOGGLPASSWORD "api_token"
+#define TOGGLAUTHSTRING TOGGLUSERNAME ":" TOGGLPASSWORD
+
+// Toggl Project ID
+#define TOGGLPID 000000000
+
+// Toggl Workspace ID
+#define TOGGLWID 0000000
+
+// Toggl description for entry
+#define TOGGLDESCRIPTION "Working"
+
+// Interval time(ms) for checking Toggl API
+#define INTERVAL 5000
+
+// LED Brightness
+#define RGB_LED_BRIGHTNESS 10
