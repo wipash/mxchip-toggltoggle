@@ -20,7 +20,8 @@
 #define TOGGLDESCRIPTION "Working"
 
 // Interval time(ms) for checking Toggl API
-#define INTERVAL 5000
+#define FASTINTERVAL 5000
+#define SLOWINTERVAL 30000
 
 // LED Brightness
 #define RGB_LED_BRIGHTNESS 10

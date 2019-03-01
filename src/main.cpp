@@ -10,7 +10,6 @@
 #include "rBase64.h"
 #include "RGB_LED.h"
 #include "SystemTickCounter.h"
-#include "utility.h"
 
 static RGB_LED rgbLed;
 
@@ -34,6 +33,8 @@ const char TOGGL_BASE_URI[] = "https://www.toggl.com/api/v8/time_entries/";
 const char TOGGL_CURRENT_URI[] = "https://www.toggl.com/api/v8/time_entries/current";
 const char TOGGL_START_URI[] = "https://www.toggl.com/api/v8/time_entries/start";
 const char TOGGL_SUMM_URI[] = "https://toggl.com/reports/api/v2/summary";
+
+static uint32_t interval = FASTINTERVAL;
 
 char authHeaderString[150];
 char currentEntryID[10];
@@ -96,6 +97,17 @@ void update_state(uint32_t newState)
   if (state != newState)
   {
     state = newState;
+    switch (state)
+    {
+    case 0: // stopped
+      interval = SLOWINTERVAL;
+      break;
+    case 1: // running
+      interval = FASTINTERVAL;
+      break;
+    default:
+      break;
+    }
     Screen.clean();
   }
 }
@@ -352,7 +364,7 @@ void loop()
     delay(2000);
   }
 
-  if ((uint32_t)SystemTickCounterRead() - checkIntervalMs >= getInterval())
+  if ((uint32_t)SystemTickCounterRead() - checkIntervalMs >= interval)
   {
     get_current_duration();
     checkIntervalMs = SystemTickCounterRead();
