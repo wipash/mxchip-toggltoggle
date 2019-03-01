@@ -74,7 +74,7 @@ const char SSL_CA_PEM[] = "-----BEGIN CERTIFICATE-----\n"
                           "NVOFBkpdn627G190\n"
                           "-----END CERTIFICATE-----\n";
 
-void InitWifi()
+void init_wifi()
 {
   Screen.print(0, "Connecting WiFi");
   if (WiFi.begin(WIFISSID, WIFIPWD) == WL_CONNECTED)
@@ -308,7 +308,7 @@ void setup()
   Serial.begin(115200);
   Screen.init();
   hasWiFi = false;
-  InitWifi();
+  init_wifi();
 
   // Create basic auth header
   rbase64.encode(TOGGLAUTHSTRING);
