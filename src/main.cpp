@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#undef max
+#undef min
 #include "ArduinoJson.h"
 #include "AZ3166WiFi.h"
 #include "config.h"
@@ -119,20 +121,34 @@ struct tm convert_seconds_to_tm(uint32_t seconds)
   return tm;
 }
 
-void date_plus_hours(struct tm* date, uint32_t hours)
+void date_plus_hours(struct tm *date, uint32_t hours)
 {
-  const time_t ONE_HOUR = 60*60;
+  const time_t ONE_HOUR = 60 * 60;
   time_t dateSeconds = mktime(date) + (hours * ONE_HOUR);
-  *date = *localtime( &dateSeconds);
+  *date = *localtime(&dateSeconds);
+}
+
+void http_request(char *buffer, http_method method, const char *url, const void *body = NULL, int body_size = 0)
+{
+  HTTPClient client(SSL_CA_PEM, method, url);
+  client.set_header("Authorization", authHeaderString);
+  client.set_header("Content-Type", "application/json");
+  //Serial.printf("Request: %s\n", url);
+  const Http_Response *result = client.send(body, body_size);
+  if (result == NULL)
+  {
+    Serial.print("Error Code: ");
+    Serial.println(client.get_error());
+  }
+  else
+  {
+    sprintf(buffer, "%s", result->body);
+  }
 }
 
 void start_entry()
 {
   state = 2;
-  HTTPClient client(SSL_CA_PEM, HTTP_POST, TOGGL_START_URI);
-  client.set_header("Authorization", authHeaderString);
-  client.set_header("Content-Type", "application/json");
-
   Screen.clean();
   Screen.print(0, "Starting");
   Serial.println("Starting new entry");
@@ -151,22 +167,20 @@ void start_entry()
   time_entry["created_with"] = "toggltoggle";
   time_entry["start"] = timeBuffer;
 
-  root.printTo(Serial);
+  //root.printTo(Serial);
 
   String body;
   root.printTo(body);
 
-  const Http_Response *result = client.send(body.c_str(), body.length());
-  if (result == NULL)
+  char result[500];
+  http_request(result, HTTP_POST, TOGGL_START_URI, body.c_str(), body.length());
+  if (strlen(result) == 0)
   {
-    Serial.print("Error Code: ");
-    Serial.println(client.get_error());
     Screen.print(1, "Failed");
   }
   else
   {
     Serial.println("Started");
-    Serial.println(result->body);
     Screen.print(0, "Started");
   }
 }
@@ -174,25 +188,20 @@ void start_entry()
 void stop_entry()
 {
   state = 2;
-  char requestURI[70];
-  sprintf(requestURI, "%s%s/stop", TOGGL_BASE_URI, currentEntryID);
-  HTTPClient client(SSL_CA_PEM, HTTP_PUT, requestURI);
-  client.set_header("Authorization", authHeaderString);
-  client.set_header("Content-Type", "application/json");
   Screen.clean();
   Screen.print(0, "Stopping");
   Serial.println("Stopping");
-  Serial.println(requestURI);
 
-  const Http_Response *result = client.send(NULL, 0);
-  if (result == NULL)
+  char requestURI[70];
+  sprintf(requestURI, "%s%s/stop", TOGGL_BASE_URI, currentEntryID);
+  char result[500];
+  http_request(result, HTTP_PUT, requestURI);
+  if (strlen(result) == 0)
   {
-    Serial.print("Error Code: ");
-    Serial.println(client.get_error());
+    Screen.print(1, "Failed");
   }
   else
   {
-    Serial.println(result->body);
     Serial.println("Stopped");
   }
 }
@@ -205,32 +214,25 @@ void get_day_total(uint32_t current_duration)
   tm = *gmtime(&now);
 
   // Add the UTC offset
-  date_plus_hours( &tm, UTCOFFSET);
+  date_plus_hours(&tm, UTCOFFSET);
 
   strftime(sinceTimeBuffer, sizeof(sinceTimeBuffer), "%Y-%m-%d", &tm);
 
-  Serial.println("Current duration");
-  delay(100);
   char requestURI[120];
   sprintf(requestURI, "%s?user_agent=toggltoggle&workspace_id=%s&since=%s", TOGGL_SUMM_URI, TOGGLWID, sinceTimeBuffer);
-  HTTPClient client(SSL_CA_PEM, HTTP_GET, requestURI);
-  client.set_header("Authorization", authHeaderString);
-  client.set_header("Content-Type", "application/json");
-  Serial.println(requestURI);
 
-  const Http_Response *result = client.send(NULL, 0);
-  if (result == NULL)
+  char result[500];
+  http_request(result, HTTP_GET, requestURI);
+  if (strlen(result) == 0)
   {
-    Serial.print("Error Code: ");
-    Serial.println(client.get_error());
+    Screen.print(1, "Failed");
   }
   else
   {
-    Serial.println(result->body);
     const size_t capacity = 4 * JSON_ARRAY_SIZE(1) + JSON_OBJECT_SIZE(1) + 2 * JSON_OBJECT_SIZE(2) + 2 * JSON_OBJECT_SIZE(4) + 2 * JSON_OBJECT_SIZE(5) + 360;
     DynamicJsonBuffer jsonBuffer(capacity);
-    const char *json = result->body;
-    JsonObject &root = jsonBuffer.parseObject(json);
+    //const char *json = result->body;
+    JsonObject &root = jsonBuffer.parseObject(result);
     uint32_t totalGrand = root["total_grand"];
     uint32_t dailyTotal = (totalGrand / 1000) + current_duration;
 
@@ -238,7 +240,7 @@ void get_day_total(uint32_t current_duration)
 
     char totalTimeBuffer[10];
     strftime(totalTimeBuffer, sizeof(totalTimeBuffer), "%T", &tm);
-    Serial.println(totalTimeBuffer);
+    //Serial.println(totalTimeBuffer);
     Screen.print(2, "Today's Total");
     Screen.print(3, totalTimeBuffer);
   }
@@ -246,30 +248,22 @@ void get_day_total(uint32_t current_duration)
 
 void get_current_duration()
 {
-  rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
-  HTTPClient client(SSL_CA_PEM, HTTP_GET, TOGGL_CURRENT_URI);
-  client.set_header("Authorization", authHeaderString);
-  client.set_header("Content-Type", "application/json");
-  Serial.print("Requesting ");
-  Serial.println(TOGGL_CURRENT_URI);
   rgbLed.setColor(RGB_LED_BRIGHTNESS, RGB_LED_BRIGHTNESS, 0);
-  const Http_Response *result = client.send(NULL, 0);
+  char result[500];
+  http_request(result, HTTP_GET, TOGGL_CURRENT_URI);
   rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
 
-  if (result == NULL)
+  if (strlen(result) == 0)
   {
-    Serial.print("Error Code: ");
-    Serial.println(client.get_error());
+    Screen.print(1, "Failed");
   }
   else
   {
-    Serial.println(result->body);
-
     const size_t capacity = JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(11) + 270;
     DynamicJsonBuffer jsonBuffer(capacity);
-    const char *json = result->body;
+    //const char *json = result->body;
     rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, RGB_LED_BRIGHTNESS);
-    JsonObject &root = jsonBuffer.parseObject(json);
+    JsonObject &root = jsonBuffer.parseObject(result);
     rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
     if (!root.success())
     {
@@ -279,7 +273,7 @@ void get_current_duration()
     uint32_t data_id = root["data"]["id"];
     sprintf(currentEntryID, "%lu", data_id);
 
-    Serial.printf("%d", data_duration);
+    //Serial.printf("%d\n", data_duration);
     if (data_duration < 0)
     {
       update_state(1);
@@ -293,7 +287,7 @@ void get_current_duration()
 
       char runningTimeBuffer[10];
       strftime(runningTimeBuffer, sizeof(runningTimeBuffer), "%T", &tm);
-      Serial.println(runningTimeBuffer);
+      //Serial.println(runningTimeBuffer);
 
       Screen.print(0, "Running");
       Screen.print(1, runningTimeBuffer);
