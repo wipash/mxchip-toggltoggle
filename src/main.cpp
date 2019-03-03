@@ -1,10 +1,10 @@
 #include <Arduino.h>
 #undef max
 #undef min
+#include "AzureIotHub.h"
 #include "ArduinoJson.h"
 #include "AZ3166WiFi.h"
 #include "config.h"
-#include "time.h"
 #include "http_client.h"
 #include "OledDisplay.h"
 #include "rBase64.h"
@@ -25,7 +25,7 @@ static uint32_t state = 2;
 // 2 = updating
 
 static uint32_t lastButtonAState;
-static uint32_t buttonAState;
+volatile uint32_t buttonAState;
 
 static uint32_t checkIntervalMs;
 
@@ -109,6 +109,7 @@ void update_state(uint32_t newState)
       break;
     }
     Screen.clean();
+    Screen.print(0, "Updating...");
   }
 }
 
@@ -162,7 +163,7 @@ void start_entry()
 {
   state = 2;
   Screen.clean();
-  Screen.print(0, "Starting");
+  Screen.print(0, "Starting...");
   Serial.println("Starting new entry");
 
   time_t now;
@@ -201,7 +202,7 @@ void stop_entry()
 {
   state = 2;
   Screen.clean();
-  Screen.print(0, "Stopping");
+  Screen.print(0, "Stopping...");
   Serial.println("Stopping");
 
   char requestURI[70];
@@ -315,6 +316,12 @@ void get_current_duration()
   }
 }
 
+void button_isr()
+{
+  buttonAState = digitalRead(USER_BUTTON_A);
+  digitalWrite(LED_USER, HIGH);
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -329,7 +336,7 @@ void setup()
 
   // Button setup
   pinMode(USER_BUTTON_A, INPUT);
-  lastButtonAState = digitalRead(USER_BUTTON_A);
+  buttonAState = digitalRead(USER_BUTTON_A);
 
   if (hasWiFi)
   {
@@ -341,14 +348,19 @@ void setup()
   // Turn off the annouing WIFI LED
   pinMode(LED_WIFI, OUTPUT);
   digitalWrite(LED_WIFI, LOW);
+
+  pinMode(LED_USER, OUTPUT);
+  digitalWrite(LED_USER, LOW);
 }
 
 void loop()
 {
 
-  buttonAState = digitalRead(USER_BUTTON_A);
-  if (buttonAState == LOW && lastButtonAState == HIGH)
+  attachInterrupt(USER_BUTTON_A, button_isr, FALLING);
+
+  if (buttonAState == LOW)
   {
+    digitalWrite(LED_USER, LOW);
     switch (state)
     {
     case 0:
@@ -361,7 +373,8 @@ void loop()
       break;
     }
     get_current_duration();
-    delay(2000);
+    checkIntervalMs = SystemTickCounterRead();
+    buttonAState = digitalRead(USER_BUTTON_A);
   }
 
   if ((uint32_t)SystemTickCounterRead() - checkIntervalMs >= interval)
