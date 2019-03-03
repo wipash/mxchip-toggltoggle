@@ -351,15 +351,16 @@ void setup()
 
   pinMode(LED_USER, OUTPUT);
   digitalWrite(LED_USER, LOW);
+
+  attachInterrupt(USER_BUTTON_A, button_isr, FALLING);
 }
 
 void loop()
 {
 
-  attachInterrupt(USER_BUTTON_A, button_isr, FALLING);
-
   if (buttonAState == LOW)
   {
+    buttonAState = digitalRead(USER_BUTTON_A);
     digitalWrite(LED_USER, LOW);
     switch (state)
     {
@@ -374,7 +375,6 @@ void loop()
     }
     get_current_duration();
     checkIntervalMs = SystemTickCounterRead();
-    buttonAState = digitalRead(USER_BUTTON_A);
   }
 
   if ((uint32_t)SystemTickCounterRead() - checkIntervalMs >= interval)
