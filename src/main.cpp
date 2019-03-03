@@ -6,7 +6,6 @@
 #include "AZ3166WiFi.h"
 #include "config.h"
 #include "http_client.h"
-#include "OledDisplay.h"
 #include "rBase64.h"
 #include "RGB_LED.h"
 #include "SystemTickCounter.h"
@@ -334,10 +333,6 @@ void setup()
   char *b64enc = rbase64.result();
   sprintf(authHeaderString, "Basic %s", b64enc);
 
-  // Button setup
-  pinMode(USER_BUTTON_A, INPUT);
-  buttonAState = digitalRead(USER_BUTTON_A);
-
   if (hasWiFi)
   {
     delay(2000);
@@ -345,13 +340,16 @@ void setup()
     get_current_duration();
   }
 
-  // Turn off the annouing WIFI LED
+  // Turn off the annoying WIFI LED
   pinMode(LED_WIFI, OUTPUT);
   digitalWrite(LED_WIFI, LOW);
 
   pinMode(LED_USER, OUTPUT);
   digitalWrite(LED_USER, LOW);
 
+  // Button setup
+  pinMode(USER_BUTTON_A, INPUT);
+  buttonAState = digitalRead(USER_BUTTON_A);
   attachInterrupt(USER_BUTTON_A, button_isr, FALLING);
 }
 
