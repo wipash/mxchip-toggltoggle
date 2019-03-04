@@ -23,8 +23,7 @@ static uint32_t state = 2;
 // 1 = running
 // 2 = updating
 
-static uint32_t lastButtonAState;
-volatile uint32_t buttonAState;
+volatile bool buttonPressed = false;
 
 static uint32_t checkIntervalMs;
 
@@ -317,7 +316,7 @@ void get_current_duration()
 
 void button_isr()
 {
-  buttonAState = digitalRead(USER_BUTTON_A);
+  buttonPressed = true;
   digitalWrite(LED_USER, HIGH);
 }
 
@@ -349,16 +348,16 @@ void setup()
 
   // Button setup
   pinMode(USER_BUTTON_A, INPUT);
-  buttonAState = digitalRead(USER_BUTTON_A);
   attachInterrupt(USER_BUTTON_A, button_isr, FALLING);
 }
 
 void loop()
 {
 
-  if (buttonAState == LOW)
+  //HttpsClient *client;
+  if (buttonPressed)
   {
-    buttonAState = digitalRead(USER_BUTTON_A);
+    buttonPressed = false;
     digitalWrite(LED_USER, LOW);
     switch (state)
     {
