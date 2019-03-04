@@ -37,6 +37,10 @@ static uint32_t interval = FASTINTERVAL;
 char authHeaderString[150];
 char currentEntryID[10];
 
+// Display buffers
+static char runningTimeBuffer[10];
+static char totalTimeBuffer[10];
+
 // SSL Cert for Comodo CA
 const char SSL_CA_PEM[] = "-----BEGIN CERTIFICATE-----\n"
                           "MIIF2DCCA8CgAwIBAgIQTKr5yttjb+Af907YWwOGnTANBgkqhkiG9w0BAQwFADCB\n"
@@ -88,6 +92,27 @@ void init_wifi()
     Screen.clean();
     Screen.print(1, "No Wi-Fi");
   }
+}
+
+void write_main_display()
+{
+  switch (state)
+  {
+  case 0: // stopped
+    Screen.print(0, "Stopped         ");
+    Screen.print(1, "                ");
+    break;
+
+  case 1: // running
+    Screen.print(0, "Running         ");
+    Screen.print(1, runningTimeBuffer);
+    break;
+
+  default:
+    break;
+  }
+  Screen.print(2, "Today's Total");
+  Screen.print(3, totalTimeBuffer);
 }
 
 void update_state(uint32_t newState)
@@ -142,6 +167,23 @@ void http_request(char *buffer, http_method method, const char *url, const void 
   client.set_header("Authorization", authHeaderString);
   client.set_header("Content-Type", "application/json");
   //Serial.printf("Request: %s\n", url);
+  switch (method)
+  {
+  case HTTP_GET:
+    rgbLed.setColor(RGB_LED_BRIGHTNESS / 2, RGB_LED_BRIGHTNESS / 2, 0);
+    break;
+
+  case HTTP_POST:
+    rgbLed.setColor(0, RGB_LED_BRIGHTNESS, 0);
+    break;
+
+  case HTTP_PUT:
+    rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
+    break;
+
+  default:
+    break;
+  }
   const Http_Response *result = client.send(body, body_size);
   if (result == NULL)
   {
@@ -152,6 +194,7 @@ void http_request(char *buffer, http_method method, const char *url, const void 
   {
     sprintf(buffer, "%s", result->body);
   }
+  rgbLed.turnOff();
 }
 
 void start_entry()
@@ -182,14 +225,9 @@ void start_entry()
 
   char result[500];
   http_request(result, HTTP_POST, TOGGL_START_URI, body.c_str(), body.length());
-  if (strlen(result) == 0)
-  {
-    Screen.print(1, "Failed");
-  }
-  else
+  if (strlen(result) > 0)
   {
     Serial.println("Started");
-    Screen.print(0, "Started");
   }
 }
 
@@ -204,11 +242,7 @@ void stop_entry()
   sprintf(requestURI, "%s%s/stop", TOGGL_BASE_URI, currentEntryID);
   char result[500];
   http_request(result, HTTP_PUT, requestURI);
-  if (strlen(result) == 0)
-  {
-    Screen.print(1, "Failed");
-  }
-  else
+  if (strlen(result) > 0)
   {
     Serial.println("Stopped");
   }
@@ -231,11 +265,7 @@ void get_day_total(uint32_t current_duration)
 
   char result[500];
   http_request(result, HTTP_GET, requestURI);
-  if (strlen(result) == 0)
-  {
-    Screen.print(1, "Failed");
-  }
-  else
+  if (strlen(result) > 0)
   {
     const size_t capacity = 4 * JSON_ARRAY_SIZE(1) + JSON_OBJECT_SIZE(1) + 2 * JSON_OBJECT_SIZE(2) + 2 * JSON_OBJECT_SIZE(4) + 2 * JSON_OBJECT_SIZE(5) + 360;
     DynamicJsonBuffer jsonBuffer(capacity);
@@ -247,33 +277,22 @@ void get_day_total(uint32_t current_duration)
     struct tm tmTotal;
     convert_seconds_to_tm(&tmTotal, dailyTotal);
 
-    char totalTimeBuffer[10];
     strftime(totalTimeBuffer, sizeof(totalTimeBuffer), "%T", &tmTotal);
     //Serial.println(totalTimeBuffer);
-    Screen.print(2, "Today's Total");
-    Screen.print(3, totalTimeBuffer);
   }
 }
 
 void get_current_duration()
 {
-  rgbLed.setColor(RGB_LED_BRIGHTNESS, RGB_LED_BRIGHTNESS, 0);
   char result[500];
   http_request(result, HTTP_GET, TOGGL_CURRENT_URI);
-  rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
 
-  if (strlen(result) == 0)
-  {
-    Screen.print(1, "Failed");
-  }
-  else
+  if (strlen(result) > 0)
   {
     const size_t capacity = JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(11) + 270;
     DynamicJsonBuffer jsonBuffer(capacity);
     //const char *json = result->body;
-    rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, RGB_LED_BRIGHTNESS);
     JsonObject &root = jsonBuffer.parseObject(result);
-    rgbLed.setColor(RGB_LED_BRIGHTNESS, 0, 0);
     if (!root.success())
     {
       Serial.println("parseObject() failed");
@@ -295,20 +314,13 @@ void get_current_duration()
       struct tm tmDuration;
       convert_seconds_to_tm(&tmDuration, duration);
 
-      char runningTimeBuffer[10];
       strftime(runningTimeBuffer, sizeof(runningTimeBuffer), "%T", &tmDuration);
       //Serial.println(runningTimeBuffer);
-
-      Screen.print(0, "Running");
-      Screen.print(1, runningTimeBuffer);
-      rgbLed.turnOff();
     }
     else
     {
       update_state(0);
       get_day_total(0);
-      Screen.print(0, "Stopped");
-      rgbLed.turnOff();
     }
   }
 }
@@ -336,6 +348,7 @@ void setup()
     delay(2000);
     Screen.clean();
     get_current_duration();
+    write_main_display();
   }
 
   // Turn off the annoying WIFI LED
@@ -370,12 +383,14 @@ void loop()
       break;
     }
     get_current_duration();
+    write_main_display();
     checkIntervalMs = SystemTickCounterRead();
   }
 
   if ((uint32_t)SystemTickCounterRead() - checkIntervalMs >= interval)
   {
     get_current_duration();
+    write_main_display();
     checkIntervalMs = SystemTickCounterRead();
   }
 }
