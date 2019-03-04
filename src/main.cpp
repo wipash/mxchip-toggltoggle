@@ -111,7 +111,7 @@ void update_state(uint32_t newState)
   }
 }
 
-struct tm convert_seconds_to_tm(uint32_t seconds)
+void convert_seconds_to_tm(struct tm *tm, uint32_t seconds)
 {
   uint32_t hh, mm, ss;
   hh = seconds / 3600;
@@ -120,16 +120,13 @@ struct tm convert_seconds_to_tm(uint32_t seconds)
   seconds %= 60;
   ss = seconds;
 
-  struct tm tm;
-  tm.tm_year = 2000 - 1900;
-  tm.tm_mon = 1 - 1;
-  tm.tm_mday = 1;
-  tm.tm_hour = hh;
-  tm.tm_min = mm;
-  tm.tm_sec = ss;
-  tm.tm_isdst = 0;
-
-  return tm;
+  tm->tm_year = 2000 - 1900;
+  tm->tm_mon = 1 - 1;
+  tm->tm_mday = 1;
+  tm->tm_hour = hh;
+  tm->tm_min = mm;
+  tm->tm_sec = ss;
+  tm->tm_isdst = 0;
 }
 
 void date_plus_hours(struct tm *date, uint32_t hours)
@@ -221,13 +218,13 @@ void get_day_total(uint32_t current_duration)
 {
   char sinceTimeBuffer[11];
   time_t now = time(NULL);
-  struct tm tm;
-  tm = *gmtime(&now);
+  struct tm tmNow;
+  tmNow = *gmtime(&now);
 
   // Add the UTC offset
-  date_plus_hours(&tm, UTCOFFSET);
+  date_plus_hours(&tmNow, UTCOFFSET);
 
-  strftime(sinceTimeBuffer, sizeof(sinceTimeBuffer), "%Y-%m-%d", &tm);
+  strftime(sinceTimeBuffer, sizeof(sinceTimeBuffer), "%Y-%m-%d", &tmNow);
 
   char requestURI[120];
   sprintf(requestURI, "%s?user_agent=toggltoggle&workspace_id=%s&since=%s", TOGGL_SUMM_URI, TOGGLWID, sinceTimeBuffer);
@@ -247,10 +244,11 @@ void get_day_total(uint32_t current_duration)
     uint32_t totalGrand = root["total_grand"];
     uint32_t dailyTotal = (totalGrand / 1000) + current_duration;
 
-    struct tm tm = convert_seconds_to_tm(dailyTotal);
+    struct tm tmTotal;
+    convert_seconds_to_tm(&tmTotal, dailyTotal);
 
     char totalTimeBuffer[10];
-    strftime(totalTimeBuffer, sizeof(totalTimeBuffer), "%T", &tm);
+    strftime(totalTimeBuffer, sizeof(totalTimeBuffer), "%T", &tmTotal);
     //Serial.println(totalTimeBuffer);
     Screen.print(2, "Today's Total");
     Screen.print(3, totalTimeBuffer);
@@ -294,10 +292,11 @@ void get_current_duration()
       uint32_t duration = currentSeconds + data_duration;
 
       get_day_total(duration);
-      struct tm tm = convert_seconds_to_tm(duration);
+      struct tm tmDuration;
+      convert_seconds_to_tm(&tmDuration, duration);
 
       char runningTimeBuffer[10];
-      strftime(runningTimeBuffer, sizeof(runningTimeBuffer), "%T", &tm);
+      strftime(runningTimeBuffer, sizeof(runningTimeBuffer), "%T", &tmDuration);
       //Serial.println(runningTimeBuffer);
 
       Screen.print(0, "Running");
