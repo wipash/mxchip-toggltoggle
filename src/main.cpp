@@ -83,14 +83,31 @@ void init_wifi()
   if (WiFi.begin(WIFISSID, WIFIPWD) == WL_CONNECTED)
   {
     IPAddress ip = WiFi.localIP();
-    Screen.clean();
-    Screen.print(3, ip.get_address());
+    Serial.println(ip.get_address());
     hasWiFi = true;
   }
   else
   {
     Screen.clean();
     Screen.print(1, "No Wi-Fi");
+  }
+}
+
+/**
+    Instead of Screen.clean(), so the screen doesn't flicker
+ */
+void write_only_line(uint8_t line, const char *message)
+{
+  for (size_t i = 0; i < 4; i++)
+  {
+    if (i == line)
+    {
+      Screen.print(i, message);
+    }
+    else
+    {
+      Screen.print(i, "                ");
+    }
   }
 }
 
@@ -131,8 +148,6 @@ void update_state(uint32_t newState)
     default:
       break;
     }
-    Screen.clean();
-    Screen.print(0, "Updating...");
   }
 }
 
@@ -200,8 +215,7 @@ void http_request(char *buffer, http_method method, const char *url, const void 
 void start_entry()
 {
   state = 2;
-  Screen.clean();
-  Screen.print(0, "Starting...");
+  write_only_line(0, "Starting...");
   Serial.println("Starting new entry");
 
   time_t now;
@@ -234,8 +248,7 @@ void start_entry()
 void stop_entry()
 {
   state = 2;
-  Screen.clean();
-  Screen.print(0, "Stopping...");
+  write_only_line(0, "Stopping...");
   Serial.println("Stopping");
 
   char requestURI[70];
@@ -345,8 +358,7 @@ void setup()
 
   if (hasWiFi)
   {
-    delay(2000);
-    Screen.clean();
+    Screen.print(0, "Initialising...");
     get_current_duration();
     write_main_display();
   }
